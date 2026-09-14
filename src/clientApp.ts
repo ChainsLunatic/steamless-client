@@ -36,6 +36,7 @@ export interface Args {
     public_tls: boolean;
     use_subdomains: boolean;
     internal_backend?: string;
+    external_backend?: string;
     server_list?: string;
     guest: boolean;
     beautify: boolean;
@@ -77,6 +78,11 @@ const argv: Args = (() => {
         .option(
             '--internal_backend <url>',
             'Set the internal backend url when running the Screeps server in a local container.',
+        )
+        .option(
+            '--external_backend <url>',
+            'The public url of that same server. Requests for it are served from --internal_backend, ' +
+                'so a client opened against the public name does not leave the network to reach it.',
         )
         .option('--server_list <path>', 'Path to a custom server list json config file.')
         .option('--guest', 'Enable guest mode for xxscreeps.', false)
@@ -143,8 +149,17 @@ const urlFromRequest = (host: string | undefined, proto?: string | string[]): UR
     return publicURL;
 };
 
-const getProxyTarget = (backend: string) =>
-    argv.internal_backend && backend.includes(localhost) ? argv.internal_backend : backend;
+const getProxyTarget = (backend: string) => {
+    if (!argv.internal_backend) return backend;
+    // A private server reached from outside cannot be addressed as `localhost`:
+    // that is the browser's own machine, and the game client resolves some
+    // assets against the backend origin itself. So the backend has to be a name
+    // that resolves everywhere - and requests for it are still served from the
+    // container next door rather than sent out and back through DNS.
+    const external = argv.external_backend?.replace(/\/+$/, '');
+    if (external && backend.replace(/\/+$/, '') === external) return argv.internal_backend;
+    return backend.includes(localhost) ? argv.internal_backend : backend;
+};
 
 // Log welcome message
 console.log('🧩', chalk.yellowBright(`Screepers Steamless Client v${version}`));
