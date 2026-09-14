@@ -63,8 +63,9 @@ export class Server {
         }
         const { protocol, hostname, port } = hostUrl;
         const dot = hostname.indexOf('.');
-        const subdomain = hostname.slice(0, dot);
-        const host = hostname.slice(dot + 1);
+        const invented = dot !== -1 && hostname.slice(dot + 1) === 'localhost';
+        const subdomain = invented ? hostname.slice(0, dot) : '';
+        const host = invented ? hostname.slice(dot + 1) : hostname;
         return new this({
             host,
             port,

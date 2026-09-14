@@ -132,10 +132,11 @@ const publicURL =
         return url;
     })() ?? hostURL;
 
-const urlFromRequest = (host: string | undefined): URL => {
+const urlFromRequest = (host: string | undefined, proto?: string | string[]): URL => {
     if (host) {
         const url = new URL('http://example.com');
-        url.protocol = argv.public_tls ? 'https' : 'http';
+        const forwarded = (Array.isArray(proto) ? proto[0] : proto)?.split(',')[0]?.trim();
+        url.protocol = forwarded || (argv.public_tls ? 'https' : 'http');
         url.host = host;
         return url;
     }
@@ -234,8 +235,9 @@ koa.use(async (ctx, next) => {
 koa.use(async (context, next) => {
     if (['/', 'index.html'].includes(context.path)) {
         const communityPages = getCommunityPages();
-        const useSubdomains = (publicURL ?? hostURL).hostname == 'localhost' || argv.use_subdomains;
-        const serverList = await getServerListConfig(__dirname, publicURL, useSubdomains, argv.server_list);
+        const requestURL = urlFromRequest(context.header.host, context.header['x-forwarded-proto']);
+        const useSubdomains = requestURL.hostname == 'localhost' || argv.use_subdomains;
+        const serverList = await getServerListConfig(__dirname, requestURL, useSubdomains, argv.server_list);
         await context.render(indexFile, { serverList, communityPages });
     }
 
@@ -265,7 +267,7 @@ koa.use((context, next) => {
 
 // Serve client assets
 koa.use(async (context, next) => {
-    const server = Server.fromRequest(urlFromRequest(context.header.host), context.path);
+    const server = Server.fromRequest(urlFromRequest(context.header.host, context.header['x-forwarded-proto']), context.path);
     if (!server) return;
 
     const { endpoint } = server;
@@ -316,7 +318,7 @@ koa.use((context, next) => {
         return;
     }
 
-    const server = Server.fromRequest(urlFromRequest(context.header.host), context.url);
+    const server = Server.fromRequest(urlFromRequest(context.header.host, context.header['x-forwarded-proto']), context.url);
     if (server) {
         const { backend, endpoint } = server;
 
@@ -337,7 +339,7 @@ koa.use((context, next) => {
 
 // Proxy WebSocket requests
 server.on('upgrade', (req, socket, head) => {
-    const server = Server.fromRequest(urlFromRequest(req.headers.host), req.url!);
+    const server = Server.fromRequest(urlFromRequest(req.headers.host, req.headers['x-forwarded-proto']), req.url!);
 
     if (server && req.headers.upgrade?.toLowerCase() === 'websocket') {
         req.url = server.endpoint;
