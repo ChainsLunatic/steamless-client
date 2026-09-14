@@ -49,7 +49,10 @@ export class Server {
         const groups = /^\/\((?<backend>[^)]+)\)(?<endpoint>\/.*)$/.exec(url)?.groups;
         if (!groups) return null;
         const info = {
-            backend: groups.backend.replace(/\/+$/, ''),
+            // `merge_slashes` is on by default in nginx and collapses the `//`
+            // in the backend's scheme, because to a reverse proxy this is just a
+            // path. Put it back: the parentheses are what says this is a URL.
+            backend: groups.backend.replace(/^(https?:)\/+/, '$1//').replace(/\/+$/, ''),
             endpoint: groups.endpoint,
         };
 
